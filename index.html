@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AeroScan AI - Live Drone Monitor</title>
+<style>
+body {
+font-family: 'Segoe UI', Arial, sans-serif;
+background-color: #0f172a;
+color: #f8fafc;
+margin: 0;
+padding: 20px;
+display: flex;
+flex-direction: column;
+align-items: center;
+}
+.container {
+max-width: 900px;
+width: 100%;
+background: #1e293b;
+border-radius: 12px;
+padding: 24px;
+box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5);
+}
+header {
+text-align: center;
+margin-bottom: 24px;
+border-bottom: 2px solid #334155;
+padding-bottom: 12px;
+}
+h1 { margin: 0; color: #38bdf8; font-size: 28px; }
+p.subtitle { margin: 5px 0 0 0; color: #94a3b8; font-size: 14px; }
+
+.main-layout {
+display: grid;
+grid-template-columns: 1fr 1fr;
+gap: 20px;
+}
+@media (max-width: 768px) {
+.main-layout { grid-template-columns: 1fr; }
+}
+
+.panel {
+background: #0f172a;
+border-radius: 8px;
+padding: 16px;
+border: 1px solid #334155;
+}
+.panel-title {
+margin-top: 0;
+font-size: 16px;
+color: #94a3b8;
+text-transform: uppercase;
+letter-spacing: 0.05em;
+margin-bottom: 12px;
+}
+
+/* Camera Feed Viewport */
+.video-box {
+width: 100%;
+height: 240px;
+background: #020617;
+border-radius: 6px;
+position: relative;
+overflow: hidden;
+display: flex;
+justify-content: center;
+align-items: center;
+border: 2px solid #38bdf8;
+box-sizing: border-box;
+}
+.video-box.alarm-active {
+border-color: #ef4444;
+animation: pulse-border 1s infinite alternate;
+}
+@keyframes pulse-border {
+from { border-color: #3f0000; }
+to { border-color: #ef4444; }
+}
+
+/* Actual Webcam Video Element style */
+video {
+width: 100%;
+height: 100%;
+object-fit: cover;
+transform: scaleX(-1); /* Mirrors webcam view for natural presentation */
+}
+
+.scan-line {
+width: 100%;
+height: 4px;
+background: rgba(56, 189, 248, 0.5);
+position: absolute;
+top: 0;
+box-shadow: 0 0 8px #38bdf8;
+animation: scan 3s infinite linear;
+pointer-events: none;
+}
+@keyframes scan {
+0% { top: 0; }
+50% { top: 100%; }
+100% { top: 0; }
+}
+
+/* UI Control Buttons */
+.btn-group {
+display: flex;
+gap: 10px;
+margin-top: 15px;
+}
+button {
+flex: 1;
+padding: 12px;
+border: none;
+border-radius: 6px;
+font-weight: bold;
+cursor: pointer;
+transition: all 0.2s ease;
+}
+.btn-safe { background-color: #10b981; color: white; }
+.btn-safe:hover { background-color: #059669; }
+.btn-leak { background-color: #ef4444; color: white; }
+.btn-leak:hover { background-color: #dc2626; }
+
+/* Classification Bars */
+.ai-bar-container {
+margin-bottom: 16px;
+}
+.bar-label {
+display: flex;
+justify-content: space-between;
+margin-bottom: 6px;
+font-size: 14px;
+}
+.bar-outer {
+width: 100%;
+height: 20px;
+background: #1e293b;
+border-radius: 10px;
+overflow: hidden;
+}
+.bar-inner {
+height: 100%;
+width: 0%;
+transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.bar-safe { background-color: #10b981; }
+.bar-leak { background-color: #ef4444; }
+
+/* Dashboard Banner */
+.status-banner {
+text-align: center;
+padding: 15px;
+border-radius: 6px;
+font-size: 18px;
+font-weight: bold;
+margin-top: 15px;
+background: #1e293b;
+border: 1px solid #334155;
+}
+.status-banner.secure {
+background-color: rgba(16, 185, 129, 0.1);
+color: #10b981;
+border-color: #10b981;
+}
+.status-banner.danger {
+background-color: rgba(239, 68, 68, 0.1);
+color: #ef4444;
+border-color: #ef4444;
+animation: flash-bg 0.5s infinite alternate;
+}
+@keyframes flash-bg {
+from { background-color: rgba(239, 68, 68, 0.1); }
+to { background-color: rgba(239, 68, 68, 0.3); }
+}
+.audio-note {
+text-align: center;
+font-size: 11px;
+color: #64748b;
+margin-top: 10px;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+<header>
+<h1>AeroScan AI Dashboard</h1>
+<p class="subtitle">Live Camera Edge Vision Model Interface</p>
+</header>
+
+<div class="main-layout">
+<!-- Live Hardware Camera Stream Panel -->
+<div class="panel">
+<h3 class="panel-title">Live Drone Camera Feed</h3>
+<div class="video-box" id="videoBox">
+<!-- HTML5 Video element handles the hardware stream directly -->
+<video id="webcam" autoplay playsinline></video>
+<div class="scan-line"></div>
+<span style="position:absolute; top:10px; left:10px; background:rgba(0,0,0,0.6); padding:2px 6px; border-radius:4px; font-size:12px; color:#38bdf8; font-family:monospace; pointer-events:none;">CAM-01 // HARDWARE_LIVE</span>
+</div>
+
+<div class="btn-group">
+<button class="btn-safe" onclick="setPipelineStatus('secure')">AI Trigger: Clear Pipeline</button>
+<button class="btn-leak" onclick="setPipelineStatus('leak')">AI Trigger: Leak Anomaly</button>
+</div>
+</div>
+
+<!-- AI Inference Brain Panel -->
+<div class="panel">
+<h3 class="panel-title">AI Real-Time Analysis</h3>
+
+<div class="ai-bar-container">
+<div class="bar-label">
+<span>Class: Secure_Operations</span>
+<span id="txtSafe">100%</span>
+</div>
+<div class="bar-outer">
+<div class="bar-inner bar-safe" id="barSafe" style="width: 100%;"></div>
+</div>
+</div>
+
+<div class="ai-bar-container">
+<div class="bar-label">
+<span>Class: Leak_Anomaly_Detected</span>
+<span id="txtLeak">0%</span>
+</div>
+<div class="bar-outer">
+<div class="bar-inner bar-leak" id="barLeak" style="width: 0%;"></div>
+</div>
+</div>
+
+<div class="status-banner secure" id="statusBanner">
+SYSTEM STATUS: SECURE
+</div>
+<p class="audio-note">⚠️ Note: Accept the browser camera prompt to view your physical model live!</p>
+</div>
+</div>
+</div>
+
+<script>
+let audioCtx = null;
+let alarmInterval = null;
+const videoElement = document.getElementById('webcam');
+
+// Link the code to your actual laptop camera hardware
+async function setupWebcam() {
+try {
+const stream = await navigator.mediaDevices.getUserMedia({
+video: { width: 640, height: 480, facingMode: "user" },
+audio: false
+});
+videoElement.srcObject = stream;
+} catch (err) {
+console.error("Camera access denied or missing hardware:", err);
+alert("Could not access your laptop camera. Please make sure camera permissions are enabled in your browser.");
+}
+}
+
+// Run camera initialization instantly when the file loads
+window.addEventListener('DOMContentLoaded', setupWebcam);
+
+// Audio alarm generator (Siren)
+function startAudioAlarm() {
+if (!audioCtx) {
+audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+if (alarmInterval) return;
+
+alarmInterval = setInterval(() => {
+if (!audioCtx || audioCtx.state === 'suspended') return;
+
+let osc = audioCtx.createOscillator();
+let gain = audioCtx.createGain();
+
+osc.type = 'sine';
+osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.4);
+
+gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+
+osc.connect(gain);
+gain.connect(audioCtx.destination);
+
+osc.start();
+osc.stop(audioCtx.currentTime + 0.4);
+}, 500);
+}
+
+function stopAudioAlarm() {
+if (alarmInterval) {
+clearInterval(alarmInterval);
+alarmInterval = null;
+}
+}
+
+// Update layout system indicators
+function setPipelineStatus(status) {
+if (!audioCtx) {
+audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+
+const videoBox = document.getElementById('videoBox');
